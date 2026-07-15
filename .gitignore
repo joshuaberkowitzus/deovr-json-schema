@@ -3,3 +3,5 @@ dist
 single.json
 multi.json
 *.d.ts
+app/node_modules
+app/dist
