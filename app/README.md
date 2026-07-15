@@ -15,8 +15,8 @@ The app reads a VRPorn.com API JSON payload and maps it to a `SingleVideoJson` o
 | `data.item.description` | `description` | |
 | `data.item.publishedAt` | `date` | unix timestamp |
 | `data.item.shortVideo.path` | `videoPreview` | |
-| `data.item.sources.free.*` | `encodings[0]` (h264) | free-tier sources |
-| `data.item.sources.paid.*` | `encodings[1]` (h265) | paid-tier sources |
+| `data.item.sources.free.*` | `encodings[0]` (name: "free") | free-tier sources |
+| `data.item.sources.paid.*` | `encodings[1]` (name: "paid") | paid-tier sources |
 | category slug `180` | `screenType: "dome"`, `viewAngle: 180` | |
 | category slug `360` | `screenType: "sphere"`, `viewAngle: 360` | |
 | category slug `3d` | `id3d: true`, `stereoMode: "sbs"` | |

@@ -274,8 +274,12 @@ function formatDuration(seconds: number): string {
   return `${s}s`;
 }
 
-/** Validate that a URL uses only http or https and points to a public host. */
-function validateSourceUrl(urlString: string): string | null {
+/**
+ * Validate that a URL uses only http or https and points to a public host.
+ * Returns the parsed URL object on success, or an error message string on failure.
+ * Using the parsed URL object ensures the fetch call uses a normalized, sanitized URL.
+ */
+function validateSourceUrl(urlString: string): URL | string {
   let parsed: URL;
   try {
     parsed = new URL(urlString);
@@ -298,7 +302,7 @@ function validateSourceUrl(urlString: string): string | null {
   ) {
     return "Requests to private or loopback addresses are not allowed.";
   }
-  return null;
+  return parsed;
 }
 
 /** GET / — render the converter UI, optionally fetching a ?url= */
@@ -314,12 +318,13 @@ app.get("/", async (req: Request, res: Response) => {
   let deovrJson: SingleVideoJson | undefined;
   let error: string | undefined;
 
-  const urlError = validateSourceUrl(sourceUrl);
-  if (urlError) {
-    error = urlError;
+  const validated = validateSourceUrl(sourceUrl);
+  if (typeof validated === "string") {
+    error = validated;
   } else {
+    // Use the normalized URL object (not raw user input) to prevent request forgery
     try {
-      const response = await fetch(sourceUrl, {
+      const response = await fetch(validated, {
         headers: { "User-Agent": "deovr-json-converter/1.0" },
       });
       if (!response.ok) {
