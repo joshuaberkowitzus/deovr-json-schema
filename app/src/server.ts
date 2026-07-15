@@ -5,6 +5,9 @@ import { parseSourceToDeoVR, SourceJson, SingleVideoJson } from "./parser";
 const app = express();
 const PORT = process.env.PORT ?? 3000;
 
+/** Maximum number of source JSON characters shown in the "Source JSON" tab. */
+const MAX_SOURCE_JSON_DISPLAY_LENGTH = 50_000;
+
 app.use(express.json({ limit: "10mb" }));
 
 /** Build the HTML page showing input summary and DeoVR JSON output. */
@@ -225,7 +228,7 @@ function renderPage(opts: {
       ${
         inputJson
           ? `<div id="tab-source" class="tab-content">
-        <pre>${escapeHtml(JSON.stringify(inputJson, null, 2).slice(0, 50000))}</pre>
+        <pre>${escapeHtml(JSON.stringify(inputJson, null, 2).slice(0, MAX_SOURCE_JSON_DISPLAY_LENGTH))}</pre>
       </div>`
           : ""
       }
@@ -274,20 +277,27 @@ function formatDuration(seconds: number): string {
   return `${s}s`;
 }
 
+type UrlValidationResult = { ok: true; url: URL } | { ok: false; error: string };
+
 /**
  * Validate that a URL uses only http or https and points to a public host.
- * Returns the parsed URL object on success, or an error message string on failure.
- * Using the parsed URL object ensures the fetch call uses a normalized, sanitized URL.
+ * Returns the parsed URL object on success so callers use the normalized,
+ * sanitized URL in fetch() rather than the raw user-supplied string.
+ *
+ * NOTE: This app intentionally fetches user-provided URLs (that is its purpose).
+ * The validation here mitigates SSRF by enforcing https/http-only and blocking
+ * private/loopback address ranges. A CodeQL js/request-forgery alert is expected
+ * because the URL still originates from user input; the mitigation is intentional.
  */
-function validateSourceUrl(urlString: string): URL | string {
+function validateSourceUrl(urlString: string): UrlValidationResult {
   let parsed: URL;
   try {
     parsed = new URL(urlString);
   } catch {
-    return "Invalid URL format.";
+    return { ok: false, error: "Invalid URL format." };
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return "Only http and https URLs are allowed.";
+    return { ok: false, error: "Only http and https URLs are allowed." };
   }
   const hostname = parsed.hostname.toLowerCase();
   // Reject requests to loopback, link-local, and private-network addresses
@@ -300,9 +310,9 @@ function validateSourceUrl(urlString: string): URL | string {
     hostname.startsWith("192.168.") ||
     /^172\.(1[6-9]|2\d|3[01])\./.test(hostname)
   ) {
-    return "Requests to private or loopback addresses are not allowed.";
+    return { ok: false, error: "Requests to private or loopback addresses are not allowed." };
   }
-  return parsed;
+  return { ok: true, url: parsed };
 }
 
 /** GET / — render the converter UI, optionally fetching a ?url= */
@@ -319,12 +329,12 @@ app.get("/", async (req: Request, res: Response) => {
   let error: string | undefined;
 
   const validated = validateSourceUrl(sourceUrl);
-  if (typeof validated === "string") {
-    error = validated;
+  if (!validated.ok) {
+    error = validated.error;
   } else {
-    // Use the normalized URL object (not raw user input) to prevent request forgery
+    // Use the normalized URL object (not raw user input) to reduce request-forgery risk
     try {
-      const response = await fetch(validated, {
+      const response = await fetch(validated.url, {
         headers: { "User-Agent": "deovr-json-converter/1.0" },
       });
       if (!response.ok) {

@@ -90,10 +90,13 @@ export interface SourceJson {
 /**
  * Simple djb2-style hash to convert a UUID string to a positive integer
  * suitable for DeoVR's numeric `id` field.
+ * The iteration length is capped at 36 (the standard UUID length) as a
+ * defensive measure against non-UUID strings from untrusted input.
  */
 function uuidToNumber(uuid: string): number {
   let hash = 5381;
-  // UUIDs are always 36 characters; cap iteration to avoid unbounded input
+  // Standard UUIDs are 36 characters (e.g. "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx").
+  // Cap at 36 to guard against unexpectedly long strings from untrusted input.
   const len = Math.min(uuid.length, 36);
   for (let i = 0; i < len; i++) {
     hash = ((hash << 5) + hash + uuid.charCodeAt(i)) >>> 0;
@@ -127,6 +130,9 @@ function inferScreenMeta(
   }
 
   const id3d = has("3d");
+  // VRPorn.com 3D content is side-by-side stereo; the source API does not expose
+  // the stereo layout explicitly (the `stereo` field is always null in observed data),
+  // so SideBySide is the safe default for 180° VR content from this platform.
   const stereoMode: StereoMode | undefined = id3d ? StereoMode.SideBySide : undefined;
   const fps = has("60-fps") ? 60 : undefined;
 
