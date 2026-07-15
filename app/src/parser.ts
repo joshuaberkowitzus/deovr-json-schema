@@ -93,7 +93,9 @@ export interface SourceJson {
  */
 function uuidToNumber(uuid: string): number {
   let hash = 5381;
-  for (let i = 0; i < uuid.length; i++) {
+  // UUIDs are always 36 characters; cap iteration to avoid unbounded input
+  const len = Math.min(uuid.length, 36);
+  for (let i = 0; i < len; i++) {
     hash = ((hash << 5) + hash + uuid.charCodeAt(i)) >>> 0;
   }
   return hash;
@@ -128,7 +130,7 @@ function inferScreenMeta(
   const stereoMode: StereoMode | undefined = id3d ? StereoMode.SideBySide : undefined;
   const fps = has("60-fps") ? 60 : undefined;
 
-  return { screenType, viewAngle, id3d: id3d || undefined, stereoMode, fps };
+  return { screenType, viewAngle, id3d: id3d ? true : undefined, stereoMode, fps };
 }
 
 /**
@@ -176,14 +178,16 @@ export function parseSourceToDeoVR(source: SourceJson): SingleVideoJson {
 
   if (item.sources.free && Object.keys(item.sources.free).length > 0) {
     encodings.push({
-      name: "h264",
+      // Use "free" as the encoding name since the actual codec is not provided by the source API
+      name: "free",
       videoSources: tierToVideoSources(item.sources.free),
     });
   }
 
   if (item.sources.paid && Object.keys(item.sources.paid).length > 0) {
     encodings.push({
-      name: "h265",
+      // Use "paid" as the encoding name since the actual codec is not provided by the source API
+      name: "paid",
       videoSources: tierToVideoSources(item.sources.paid),
     });
   }

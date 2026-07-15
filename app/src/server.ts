@@ -236,18 +236,19 @@ function renderPage(opts: {
   </main>
 
   <script>
+    var _deovrJson = ${deovrOutput ? JSON.stringify(deovrOutput) : "null"};
     function copyJson() {
-      const text = document.getElementById('deovr-json')?.textContent ?? '';
-      navigator.clipboard.writeText(text).then(() => {
-        const btn = document.querySelector('.copy-btn');
-        if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); }
+      if (!_deovrJson) return;
+      navigator.clipboard.writeText(_deovrJson).then(() => {
+        var btn = document.querySelector('.copy-btn');
+        if (btn) { btn.textContent = 'Copied!'; setTimeout(function() { btn.textContent = 'Copy'; }, 1500); }
       });
     }
     function switchTab(e, id) {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+      document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
       e.currentTarget.classList.add('active');
-      const el = document.getElementById('tab-' + id);
+      var el = document.getElementById('tab-' + id);
       if (el) el.classList.add('active');
     }
   </script>
@@ -273,6 +274,33 @@ function formatDuration(seconds: number): string {
   return `${s}s`;
 }
 
+/** Validate that a URL uses only http or https and points to a public host. */
+function validateSourceUrl(urlString: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(urlString);
+  } catch {
+    return "Invalid URL format.";
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return "Only http and https URLs are allowed.";
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  // Reject requests to loopback, link-local, and private-network addresses
+  if (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    hostname.startsWith("169.254.") ||
+    hostname.startsWith("10.") ||
+    hostname.startsWith("192.168.") ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname)
+  ) {
+    return "Requests to private or loopback addresses are not allowed.";
+  }
+  return null;
+}
+
 /** GET / — render the converter UI, optionally fetching a ?url= */
 app.get("/", async (req: Request, res: Response) => {
   const sourceUrl = typeof req.query.url === "string" ? req.query.url.trim() : undefined;
@@ -286,18 +314,23 @@ app.get("/", async (req: Request, res: Response) => {
   let deovrJson: SingleVideoJson | undefined;
   let error: string | undefined;
 
-  try {
-    const response = await fetch(sourceUrl, {
-      headers: { "User-Agent": "deovr-json-converter/1.0" },
-    });
-    if (!response.ok) {
-      error = `HTTP ${response.status} ${response.statusText} from source URL`;
-    } else {
-      raw = (await response.json()) as object;
-      deovrJson = parseSourceToDeoVR(raw as SourceJson);
+  const urlError = validateSourceUrl(sourceUrl);
+  if (urlError) {
+    error = urlError;
+  } else {
+    try {
+      const response = await fetch(sourceUrl, {
+        headers: { "User-Agent": "deovr-json-converter/1.0" },
+      });
+      if (!response.ok) {
+        error = `HTTP ${response.status} ${response.statusText} from source URL`;
+      } else {
+        raw = (await response.json()) as object;
+        deovrJson = parseSourceToDeoVR(raw as SourceJson);
+      }
+    } catch (err: unknown) {
+      error = err instanceof Error ? err.message : String(err);
     }
-  } catch (err: unknown) {
-    error = err instanceof Error ? err.message : String(err);
   }
 
   res.send(renderPage({ deovrJson, error, sourceUrl, inputJson: raw }));
